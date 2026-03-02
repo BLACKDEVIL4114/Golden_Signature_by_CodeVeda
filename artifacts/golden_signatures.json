@@ -1,0 +1,233 @@
+{
+  "generated_at_utc": "2026-02-27T15:05:05.147033+00:00",
+  "signatures": {
+    "Balanced": {
+      "batch_id": "AUTO_45_0003",
+      "score": 92.14,
+      "weights": {
+        "Yield_Percent": 0.22,
+        "Quality_Score": 0.2,
+        "Performance_Score": 0.16,
+        "Total_Energy_kWh": 0.14,
+        "Carbon_kg": 0.12,
+        "Eco_Efficiency_Score": 0.16
+      },
+      "profile": {
+        "Batch_ID": "AUTO_45_0003",
+        "Cycle_Time": 0.0,
+        "Process_Agent_Amount": 0.0,
+        "Heat_Temp": 0.0,
+        "Heat_Duration": 0.0,
+        "Press_Force": 0.0,
+        "Machine_Speed": 245.0,
+        "Lubricant_Additive": 0.0,
+        "Moisture_Level": 0.0,
+        "Yield_Percent": 86.89,
+        "Quality_Score": 62.625890146101185,
+        "Performance_Score": 70.0,
+        "Total_Energy_kWh": 2.5,
+        "Carbon_kg": 2.05,
+        "Eco_Efficiency_Score": 89.7,
+        "Green_Zone": "Green",
+        "Scenario_Score": 92.14
+      },
+      "alternatives": [
+        {
+          "batch_id": "T024",
+          "score": 87.67
+        },
+        {
+          "batch_id": "T048",
+          "score": 86.51
+        },
+        {
+          "batch_id": "T001",
+          "score": 85.23
+        }
+      ],
+      "promoted_from": "auto_update",
+      "promoted_at_utc": "2026-03-01T06:40:13.941654+00:00"
+    },
+    "Best Yield + Low Energy": {
+      "batch_id": "T048",
+      "score": 92.31,
+      "weights": {
+        "Yield_Percent": 0.36,
+        "Quality_Score": 0.1,
+        "Performance_Score": 0.05,
+        "Total_Energy_kWh": 0.21,
+        "Carbon_kg": 0.11,
+        "Eco_Efficiency_Score": 0.17
+      },
+      "profile": {
+        "Batch_ID": "T048",
+        "Granulation_Time": 14,
+        "Binder_Amount": 7.8,
+        "Drying_Temp": 64,
+        "Drying_Time": 23,
+        "Compression_Force": 14.1,
+        "Machine_Speed": 141,
+        "Lubricant_Conc": 0.8,
+        "Moisture_Content": 2.5,
+        "Yield_Percent": 87.84,
+        "Quality_Score": 62.56,
+        "Performance_Score": 45.52,
+        "Total_Energy_kWh": 77.97850739090649,
+        "Carbon_kg": 63.94,
+        "Eco_Efficiency_Score": 90.47,
+        "Green_Zone": "Green",
+        "Scenario_Score": 92.31
+      },
+      "alternatives": [
+        {
+          "batch_id": "T048",
+          "score": 92.31
+        },
+        {
+          "batch_id": "T024",
+          "score": 91.89
+        },
+        {
+          "batch_id": "T017",
+          "score": 90.7
+        }
+      ]
+    },
+    "Best Quality + Best Yield": {
+      "batch_id": "T048",
+      "score": 91.38,
+      "weights": {
+        "Yield_Percent": 0.29,
+        "Quality_Score": 0.34,
+        "Performance_Score": 0.08,
+        "Total_Energy_kWh": 0.08,
+        "Carbon_kg": 0.08,
+        "Eco_Efficiency_Score": 0.13
+      },
+      "profile": {
+        "Batch_ID": "T048",
+        "Granulation_Time": 14,
+        "Binder_Amount": 7.8,
+        "Drying_Temp": 64,
+        "Drying_Time": 23,
+        "Compression_Force": 14.1,
+        "Machine_Speed": 141,
+        "Lubricant_Conc": 0.8,
+        "Moisture_Content": 2.5,
+        "Yield_Percent": 87.84,
+        "Quality_Score": 62.56,
+        "Performance_Score": 45.52,
+        "Total_Energy_kWh": 77.97850739090649,
+        "Carbon_kg": 63.94,
+        "Eco_Efficiency_Score": 90.47,
+        "Green_Zone": "Green",
+        "Scenario_Score": 91.38
+      },
+      "alternatives": [
+        {
+          "batch_id": "T048",
+          "score": 91.38
+        },
+        {
+          "batch_id": "T024",
+          "score": 89.72
+        },
+        {
+          "batch_id": "T055",
+          "score": 87.62
+        }
+      ]
+    },
+    "Max Performance + Min Carbon": {
+      "batch_id": "T024",
+      "score": 82.07,
+      "weights": {
+        "Yield_Percent": 0.06,
+        "Quality_Score": 0.08,
+        "Performance_Score": 0.34,
+        "Total_Energy_kWh": 0.12,
+        "Carbon_kg": 0.22,
+        "Eco_Efficiency_Score": 0.18
+      },
+      "profile": {
+        "Batch_ID": "T024",
+        "Granulation_Time": 15,
+        "Binder_Amount": 8.4,
+        "Drying_Temp": 61,
+        "Drying_Time": 25,
+        "Compression_Force": 13.1,
+        "Machine_Speed": 150,
+        "Lubricant_Conc": 1.0,
+        "Moisture_Content": 2.1,
+        "Yield_Percent": 87.25,
+        "Quality_Score": 61.56,
+        "Performance_Score": 53.05,
+        "Total_Energy_kWh": 75.86905208419867,
+        "Carbon_kg": 62.21,
+        "Eco_Efficiency_Score": 91.51,
+        "Green_Zone": "Green",
+        "Scenario_Score": 82.07
+      },
+      "alternatives": [
+        {
+          "batch_id": "T024",
+          "score": 82.07
+        },
+        {
+          "batch_id": "T001",
+          "score": 79.64
+        },
+        {
+          "batch_id": "T017",
+          "score": 78.58
+        }
+      ]
+    },
+    "Green Compliance Priority": {
+      "batch_id": "T024",
+      "score": 91.15,
+      "weights": {
+        "Yield_Percent": 0.14,
+        "Quality_Score": 0.1,
+        "Performance_Score": 0.08,
+        "Total_Energy_kWh": 0.23,
+        "Carbon_kg": 0.22,
+        "Eco_Efficiency_Score": 0.23
+      },
+      "profile": {
+        "Batch_ID": "T024",
+        "Granulation_Time": 15,
+        "Binder_Amount": 8.4,
+        "Drying_Temp": 61,
+        "Drying_Time": 25,
+        "Compression_Force": 13.1,
+        "Machine_Speed": 150,
+        "Lubricant_Conc": 1.0,
+        "Moisture_Content": 2.1,
+        "Yield_Percent": 87.25,
+        "Quality_Score": 61.56,
+        "Performance_Score": 53.05,
+        "Total_Energy_kWh": 75.86905208419867,
+        "Carbon_kg": 62.21,
+        "Eco_Efficiency_Score": 91.51,
+        "Green_Zone": "Green",
+        "Scenario_Score": 91.15
+      },
+      "alternatives": [
+        {
+          "batch_id": "T024",
+          "score": 91.15
+        },
+        {
+          "batch_id": "T048",
+          "score": 89.07
+        },
+        {
+          "batch_id": "T001",
+          "score": 88.89
+        }
+      ]
+    }
+  },
+  "updated_at_utc": "2026-03-01T06:40:13.941670+00:00"
+}

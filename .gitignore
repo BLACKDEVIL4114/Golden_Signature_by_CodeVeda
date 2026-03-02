@@ -1,0 +1,33 @@
+# ─── Python cache ─────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+
+# ─── Environment & secrets (NEVER commit these!) ──────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ─── Uploaded data files ──────────────────────────────────────────────────────
+artifacts/uploads/
+artifacts/feature_store/
+artifacts/feature_store_uploaded/
+
+# ─── Security logs (may contain event details) ────────────────────────────────
+artifacts/security_events.log
+artifacts/security_events.log.1
+
+# ─── Large data files ─────────────────────────────────────────────────────────
+*.csv
+*.xlsx
+*.pptx
+!.env.example
+
+# ─── IDE & OS files ───────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.DS_Store
+Thumbs.db
+
+# ─── Streamlit cache ──────────────────────────────────────────────────────────
+.streamlit/secrets.toml

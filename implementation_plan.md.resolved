@@ -1,0 +1,112 @@
+# AGPO Project — Code Audit & Optimization Plan
+
+A full audit of the **AGPO Progressive Dashboard** (`Hackthone/` project). All findings are grouped by severity.
+
+---
+
+## Findings Summary
+
+### 🔴 BUGS (will cause crashes or wrong results)
+
+| # | File | Issue | Fix |
+|---|------|-------|-----|
+| B1 | `data_pipeline.py:760` | **Silent exception swallow** — `except Exception: pass` in [run_pipeline](file:///C:/Users/Himanshu/OneDrive/Desktop/Hackthone/trackb_engine/data_pipeline.py#739-769) swallows ALL errors including RAM/disk failures; falls through to adaptive pipeline silently | Log the error; only catch schema mismatch, not all exceptions |
+| B2 | `data_pipeline.py:702` | **`dropna().any()` bug** — `features[col].dropna().any()` returns a scalar bool but on numeric data this is not reliable; should be `not features[col].dropna().empty` | Replace `.any()` check with `.empty` |
+| B3 | `optimization.py:126–128` | **Incorrect Pareto dominance** — The check `np.any(np.all(...) & np.any(...))` is wrong: it marks *non-dominated* points as dominated due to row-wise vs column-wise confusion | Rewrite Pareto check with correct per-row comparison |
+| B4 | `app.py:877` | **Indentation error in fallback pipeline** — `cache_dir=FEATURE_STORE_DIR` is indented 4 extra spaces inside try-except block, compiles fine but is visually wrong and may break on refactor | Fix indentation |
+| B5 | `golden.py:33–34` | **`json.load` can crash** — If `golden_signatures.json` is corrupted/partial, `json.load` raises `JSONDecodeError` with no recovery; app crashes | Wrap in try/except, return `{}` on decode error |
+| B6 | `app.py:539–541` | **Module-level mutable globals** — `JOB_QUEUE`, `WORKER_STARTED`, `LAST_JOB_STATUS` as module-level variables are shared across all Streamlit sessions (not thread-safe for multi-user deployments) | Use `st.session_state` or a proper thread-safe `queue.Queue` |
+
+---
+
+### 🟠 PERFORMANCE ISSUES
+
+| # | File | Issue | Fix |
+|---|------|-------|-----|
+| P1 | `optimization.py:122–129` | **O(n²) Pareto loop** — Full nested loop over all rows is O(n²). With large datasets (200k rows), this is extremely slow | Vectorize using numpy broadcasting |
+| P2 | `data_pipeline.py:210–228` | **[_clip_outliers_iqr](file:///C:/Users/Himanshu/OneDrive/Desktop/Hackthone/trackb_engine/data_pipeline.py#210-229) copies full df** — Does `clipped_df = df.copy()` then loops per-column; inefficient on wide dataframes | Use `df.clip()` with computed bounds, avoid per-column copy |
+| P3 | `app.py:969` | **`features["Batch_ID"].tolist()` in selectbox** — Called every render; for large datasets this creates huge lists on every Streamlit rerun | Cache the computed list in `st.session_state` |
+| P4 | `data_pipeline.py:696–703` | **Double loop over numeric columns** — First converts, then checks for inf, then fills NaN — all in a single loop but with redundant operations | Combine into one efficient pass using `pd.DataFrame.clip` and `fillna` |
+| P5 | `app.py:492–534` | **PDF generator truncates at ~49 lines** — Hard limit `if y < 80: break` with no warning shown to user; large reports silently lose data | Add ellipsis/warning when content is truncated |
+
+---
+
+### 🟡 SECURITY VULNERABILITIES
+
+| # | File | Issue | Fix |
+|---|------|-------|-----|
+| S1 | `config.py:23` | **Plaintext passwords in default config** — `AUTH_USERS` defaults to `"operator:op123:Operator,manager:man123:Manager"` — passwords visible in source code | Move to environment variable only; warn loudly if using defaults in prod |
+| S2 | `app.py:128–140` | **XSS via [speak()](file:///C:/Users/Himanshu/OneDrive/Desktop/Hackthone/app.py#128-141) function** — Text from [tr(key)](file:///C:/Users/Himanshu/OneDrive/Desktop/Hackthone/app.py#124-127) is embedded directly into a `<script>` tag without escaping. If `LANG_MAP` values ever contain `"` or `;` chars, it's injectable | Escape the text using `json.dumps()` before embedding in JS |
+| S3 | `app.py:606` | **Plaintext password comparison** — `password == creds[0]` compares passwords in plaintext; susceptible to timing attacks | Use `hmac.compare_digest()` for constant-time comparison |
+| S4 | `app.py:414–437` | **Path traversal risk in uploads** — [persist_uploaded_file](file:///C:/Users/Himanshu/OneDrive/Desktop/Hackthone/app.py#414-438) validates extension but `uploads_dir / f"{prefix}_{digest[:12]}{ext}"` could be tricked with double extensions like `.csv.xlsx` | Enforce `Path(ext).suffix` check strictly; reject filenames with multiple dots |
+| S5 | [trackb_engine/telemetry.py](file:///C:/Users/Himanshu/OneDrive/Desktop/Hackthone/trackb_engine/telemetry.py) | **Security log not rotated** — `SECURITY_LOG_FILE` appends forever with no size cap; disk exhaustion possible in long-running deployments | Add max file size or use Python `RotatingFileHandler` |
+
+---
+
+### 🔵 CODE QUALITY / ROBUSTNESS
+
+| # | File | Issue | Fix |
+|---|------|-------|-----|
+| Q1 | `data_pipeline.py:433` | **`temperature.dropna().any()` misuse** — `.any()` on a numeric Series checks truthiness, not "has values"; should be `.notna().any()` or not `.dropna().empty` | Fix the predicate |
+| Q2 | `app.py:905` | **Missing `.get()` fallback for weights** — `weights.get(obj, 0.0)` is correct but `DEFAULT_SCENARIOS[goal]` can KeyError if `goal` not in dict (sidebar selectbox uses same source, so unlikely but not safe) | Add defensive check |
+| Q3 | `tests/test_security.py:17` | **Wrong assertion for negative values** — `assertIn("Negative,'-1", out)` — the `-` prefix triggers escaping, but the assertion string is missing the newline context; can give false-positive | Update test assertion |
+
+---
+
+## Proposed Changes
+
+### Bug Fixes
+
+#### [MODIFY] [data_pipeline.py](file:///C:/Users/Himanshu/OneDrive/Desktop/Hackthone/trackb_engine/data_pipeline.py)
+- Fix silent exception swallow (B1): log the exception before fallback
+- Fix `dropna().any()` pattern (B2, Q1): replace with correct `.empty` check
+- Fix indentation of adaptive pipeline trigger line
+
+#### [MODIFY] [optimization.py](file:///C:/Users/Himanshu/OneDrive/Desktop/Hackthone/trackb_engine/optimization.py)
+- Fix Pareto dominance algorithm (B3): rewrite as vectorized per-row comparison
+- Speeds up Pareto O(n²) → O(n log n) effective (P1)
+
+#### [MODIFY] [golden.py](file:///C:/Users/Himanshu/OneDrive/Desktop/Hackthone/trackb_engine/golden.py)
+- Wrap `json.load` in try/except JSONDecodeError (B5)
+
+#### [MODIFY] [app.py](file:///C:/Users/Himanshu/OneDrive/Desktop/Hackthone/app.py)
+- Fix [speak()](file:///C:/Users/Himanshu/OneDrive/Desktop/Hackthone/app.py#128-141) XSS using `json.dumps()` (S3)
+- Fix password comparison using `hmac.compare_digest()` (S3)
+- Fix indentation in fallback pipeline (B4)
+- Cache batch ID list for selectbox (P3)
+- Add truncation warning to PDF generator (P5)
+
+#### [MODIFY] [config.py](file:///C:/Users/Himanshu/OneDrive/Desktop/Hackthone/trackb_engine/config.py)
+- Add a runtime warning when `AUTH_ENABLED=true` but default credentials are detected (S1)
+
+---
+
+## Verification Plan
+
+### Automated Tests (existing)
+
+Run existing tests from the project root:
+
+```
+cd C:\Users\Himanshu\OneDrive\Desktop\Hackthone
+python -m pytest tests/ -v
+```
+
+This runs:
+- [test_engine.py](file:///C:/Users/Himanshu/OneDrive/Desktop/Hackthone/tests/test_engine.py) — pipeline correctness, cache roundtrip, data mode flag
+- [test_security.py](file:///C:/Users/Himanshu/OneDrive/Desktop/Hackthone/tests/test_security.py) — CSV formula injection sanitization
+- [test_telemetry.py](file:///C:/Users/Himanshu/OneDrive/Desktop/Hackthone/tests/test_telemetry.py) — telemetry log events
+
+### Manual Verification
+
+After fixes, run the Streamlit app:
+```
+cd C:\Users\Himanshu\OneDrive\Desktop\Hackthone
+streamlit run app.py
+```
+
+Check:
+1. Dashboard loads with demo data without errors
+2. Batch selector works and shows metrics
+3. Pareto front section (Level 3 Enterprise, Advanced mode) renders without crash
+4. Upload a test CSV and verify it processes correctly
