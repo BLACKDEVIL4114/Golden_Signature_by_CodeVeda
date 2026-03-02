@@ -46,6 +46,11 @@ from trackb_engine.optimization import MultiObjectiveOptimizer, OptimizationTarg
 from trackb_engine.realtime import compare_batch_to_signature, estimate_roi, generate_adaptive_recommendations
 from trackb_engine.realtime import sanitize_csv
 from trackb_engine.telemetry import log_event
+try:
+    from api import app as fastapi_app
+except Exception:
+    fastapi_app = None
+app = fastapi_app
 
 st.set_page_config(
     page_title="AGPO Progressive Dashboard",
