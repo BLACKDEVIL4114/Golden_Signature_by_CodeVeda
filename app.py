@@ -1163,6 +1163,8 @@ demo_process_path = Path(PROCESS_DATA_FILE)
 demo_available = demo_production_path.exists() and demo_process_path.exists()
 showcase_available = Path("artifacts/demo_features.csv").exists()
 use_showcase_fallback = False
+prod_stamp = ("showcase", 0)
+proc_stamp = ("showcase", 0)
 if not bool(_DISABLE_BG_WORKER):
     _start_worker_once()
 
