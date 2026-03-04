@@ -17,7 +17,10 @@ import smtplib
 import os
 
 from dotenv import load_dotenv
-import streamlit_authenticator as stauth
+try:
+    import streamlit_authenticator as stauth
+except Exception:
+    stauth = None
 
 from trackb_engine.config import (
     DEFAULT_ANNUAL_BATCHES,
@@ -855,6 +858,10 @@ def _build_auth_credentials(raw: str) -> dict[str, dict[str, dict[str, str]]]:
 def _authenticate_user() -> tuple[str, str, object | None]:
     if not AUTH_ENABLED:
         return "guest", "Operator", None
+
+    if stauth is None:
+        st.error("Authentication module is not available.")
+        st.stop()
 
     users = _parse_auth_users(AUTH_USERS)
     if not users:
