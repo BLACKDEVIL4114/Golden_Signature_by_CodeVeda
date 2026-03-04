@@ -22,6 +22,7 @@ artifacts/security_events.log.1
 *.xlsx
 *.pptx
 !.env.example
+!artifacts/demo_features.csv
 
 # ─── IDE & OS files ───────────────────────────────────────────────────────────
 .vscode/
