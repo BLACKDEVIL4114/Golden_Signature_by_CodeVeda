@@ -1,9 +1,9 @@
 # SECURITY FIX 8: Pin exact minimum versions to prevent supply-chain attacks
 # and silent breakage from new releases.  Bump these intentionally after testing.
-pandas>=2.2,<3.0
-numpy>=1.26,<2.0
+pandas==2.0.3
+numpy==1.24.3
 openpyxl>=3.1,<4.0
-streamlit>=1.35,<2.0
+streamlit==1.28.0
 altair==4.2.2
 scikit-learn>=1.4,<2.0
 scipy>=1.11,<2.0
