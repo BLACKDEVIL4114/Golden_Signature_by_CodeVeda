@@ -686,9 +686,8 @@ with bottom_right:
         alt.Chart(melted)
         .mark_bar(opacity=0.9)
         .encode(
-            x=alt.X("Metric:N", axis=alt.Axis(labelColor="#c9d8e7", title=None)),
+            x=alt.X("Type:N", axis=alt.Axis(labelColor="#c9d8e7", title=None), sort=["Current", "Benchmark"]),
             y=alt.Y("Value:Q", axis=alt.Axis(labelColor="#c9d8e7", title=None)),
-            xOffset=alt.XOffset("Type:N"),
             color=alt.Color(
                 "Type:N",
                 scale=alt.Scale(domain=["Current", "Benchmark"], range=["#00a86b", "#7ed8ff"]),
@@ -696,7 +695,9 @@ with bottom_right:
             ),
             tooltip=["Metric", "Type", "Value"],
         )
-        .properties(height=240, title="Current vs Benchmark")
+        .properties(height=240)
+        .facet(column=alt.Column("Metric:N", title=None))
+        .properties(title="Current vs Benchmark")
         .configure_view(strokeOpacity=0)
         .configure_axis(
             gridColor="rgba(126, 216, 255, 0.18)",
