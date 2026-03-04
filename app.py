@@ -53,7 +53,7 @@ except Exception:
 app = fastapi_app
 
 st.set_page_config(
-    page_title="AGPO Progressive Dashboard",
+    page_title="Smart Pollution Monitoring System | Air, Noise, Water, Plastic Dashboard",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -1200,9 +1200,14 @@ if selected_signature.get("profile"):
 else:
     golden_profile = recommended.to_dict()
 
-st.title("AGPO Progressive Dashboard")
+st.title("Smart Pollution Monitoring System Dashboard")
 st.caption("Simple by default. Advanced insights appear only when factory level increases.")
 st.caption(f"Data Source: {data_source_label} | Factory Level: {mode} | Goal: {goal}")
+st.markdown(
+    "Real-time **pollution monitoring system** for **air quality monitoring**, "
+    "**noise pollution monitoring**, **water pollution tracking**, and "
+    "**plastic waste monitoring** with hotspot detection and trend analytics."
+)
 if not is_simple:
     st.caption(f"Pipeline Mode: {pipeline_mode} | Batch Strategy: {batch_strategy}")
     st.caption(f"Experience Mode: {ui_mode}")
