@@ -688,7 +688,7 @@ with bottom_right:
         .encode(
             x=alt.X("Metric:N", axis=alt.Axis(labelColor="#c9d8e7", title=None)),
             y=alt.Y("Value:Q", axis=alt.Axis(labelColor="#c9d8e7", title=None)),
-            xOffset="Type:N",
+            xOffset=alt.XOffset("Type:N"),
             color=alt.Color(
                 "Type:N",
                 scale=alt.Scale(domain=["Current", "Benchmark"], range=["#00a86b", "#7ed8ff"]),
