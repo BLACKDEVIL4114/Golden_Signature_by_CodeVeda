@@ -4,6 +4,7 @@ from pathlib import Path
 import hashlib
 import logging
 import os
+import time
 
 import altair as alt
 import numpy as np
@@ -457,6 +458,36 @@ def _safe_metric_list(frame: pd.DataFrame, candidates: list[str]) -> list[str]:
     return present or [col for col in frame.columns if pd.api.types.is_numeric_dtype(frame[col])][:4]
 
 
+def _watch_paths() -> list[Path]:
+    paths = [
+        Path("artifacts/feature_store/features.csv.gz"),
+        Path("artifacts/feature_store_uploaded/features.csv.gz"),
+        Path("artifacts/demo_features.csv"),
+        Path("_h_batch_production_data.xlsx"),
+        Path("_h_batch_process_data_copy.xlsx"),
+    ]
+    for key in ("uploaded_production_meta", "uploaded_process_meta"):
+        meta = st.session_state.get(key)
+        if isinstance(meta, dict) and meta.get("path"):
+            paths.append(Path(str(meta["path"])))
+    return paths
+
+
+def _path_fingerprint(paths: list[Path]) -> dict[str, tuple[bool, int, int]]:
+    fp: dict[str, tuple[bool, int, int]] = {}
+    for p in paths:
+        try:
+            if p.exists():
+                stat = p.stat()
+                fp[str(p)] = (True, int(stat.st_mtime_ns), int(stat.st_size))
+            else:
+                fp[str(p)] = (False, 0, 0)
+        except Exception:
+            logger.exception("Failed to stat path for live watch: %s", p)
+            fp[str(p)] = (False, 0, 0)
+    return fp
+
+
 if os.getenv("AUTH_ENABLED", "false").lower() == "true" and not st.session_state.get("auth_user"):
     st.warning("Please log in from the main dashboard to access Advanced Analytics.")
     st.page_link("app.py", label="Go to Login", icon=":material/login:")
@@ -464,6 +495,20 @@ if os.getenv("AUTH_ENABLED", "false").lower() == "true" and not st.session_state
 
 
 _inject_advanced_theme()
+
+with st.sidebar:
+    st.subheader("Live Updates")
+    live_mode = st.toggle("Enable live refresh", value=False, key="adv_live_mode")
+    refresh_sec = st.select_slider("Refresh interval (seconds)", options=[5, 10, 15, 20, 30], value=10, key="adv_live_interval")
+    manual_refresh = st.button("Refresh now")
+
+watch_fp = _path_fingerprint(_watch_paths())
+previous_fp = st.session_state.get("adv_live_fingerprint")
+if previous_fp and previous_fp != watch_fp:
+    st.info("New data detected. Analytics view updated.")
+st.session_state["adv_live_fingerprint"] = watch_fp
+if manual_refresh:
+    st.rerun()
 
 st.markdown(
     """
@@ -482,6 +527,9 @@ golden = st.session_state.get("adv_golden_profile", {})
 if features.empty or "Batch_ID" not in features.columns:
     _show_dataset_upload_fallback()
     st.page_link("app.py", label="Go to Main Dashboard", icon=":material/home:")
+    if live_mode:
+        time.sleep(int(refresh_sec))
+        st.rerun()
     st.stop()
 
 features = features.copy()
@@ -835,3 +883,7 @@ if anomaly_count > 0:
     st.dataframe(anomalies, use_container_width=True, hide_index=True)
 
 st.caption("Tip: select a batch in the main dashboard first for fully synchronized context.")
+
+if live_mode:
+    time.sleep(int(refresh_sec))
+    st.rerun()
