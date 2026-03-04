@@ -1410,6 +1410,10 @@ if mode == "Level 3 - Enterprise":
         )
 
 # FIX P3: cache Batch_ID list to avoid re-building on every Streamlit rerun
+if "prod_stamp" not in locals():
+    prod_stamp = ("showcase", 0)
+if "proc_stamp" not in locals():
+    proc_stamp = ("showcase", 0)
 _batch_cache_key = (prod_stamp, proc_stamp)
 if st.session_state.get("_batch_id_cache_key") != _batch_cache_key:
     st.session_state["_batch_id_list"] = features["Batch_ID"].tolist()
