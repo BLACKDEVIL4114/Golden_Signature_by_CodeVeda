@@ -32,3 +32,5 @@ Thumbs.db
 
 # ─── Streamlit cache ──────────────────────────────────────────────────────────
 .streamlit/secrets.toml
+
+.venv/

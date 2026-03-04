@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import hashlib
-import hmac
 import json as _json
+import logging
 from pathlib import Path
 
 import altair as alt
@@ -13,6 +13,9 @@ import threading
 import time
 import smtplib
 import os
+
+from dotenv import load_dotenv
+import streamlit_authenticator as stauth
 
 from trackb_engine.config import (
     DEFAULT_ANNUAL_BATCHES,
@@ -51,6 +54,9 @@ try:
 except Exception:
     fastapi_app = None
 app = fastapi_app
+
+load_dotenv()
+logger = logging.getLogger(__name__)
 
 st.set_page_config(
     page_title="Smart Pollution Monitoring System | Air, Noise, Water, Plastic Dashboard",
@@ -694,85 +700,65 @@ def _parse_auth_users(raw: str) -> dict[str, tuple[str, str]]:
             mapping[user] = (pwd, role)
     return mapping
 
-def _session_user() -> tuple[str, str] | None:
-    u = st.session_state.get("auth_user")
-    r = st.session_state.get("auth_role")
-    return (u, r) if u and r else None
 
-# SECURITY FIX 7: Brute-force lockout + session timeout
-_MAX_LOGIN_ATTEMPTS = int(os.environ.get("MAX_LOGIN_ATTEMPTS", "5"))
-_LOCKOUT_SECONDS = int(os.environ.get("LOGIN_LOCKOUT_SECONDS", "900"))  # 15 min default
-_SESSION_TIMEOUT_SECONDS = int(os.environ.get("SESSION_TIMEOUT_SECONDS", str(8 * 3600)))  # 8 hrs default
+def _build_auth_credentials(raw: str) -> dict[str, dict[str, dict[str, str]]]:
+    users = _parse_auth_users(raw)
+    usernames: dict[str, dict[str, str]] = {}
+    for username, (password, role) in users.items():
+        usernames[username] = {
+            "name": username,
+            "email": f"{username}@local.invalid",
+            "password": password,
+            "role": role,
+        }
+    return {"usernames": usernames}
 
 
-def _login_view() -> None:
+def _authenticate_user() -> tuple[str, str, object | None]:
+    if not AUTH_ENABLED:
+        return "guest", "Operator", None
+
     users = _parse_auth_users(AUTH_USERS)
-    st.subheader("Login")
+    if not users:
+        st.error("Authentication is enabled but no users are configured in AUTH_USERS.")
+        st.stop()
 
-    # ── Session timeout check ─────────────────────────────────────────
-    last_active = float(st.session_state.get("last_active_ts", 0.0))
-    if last_active > 0 and (time.time() - last_active) > _SESSION_TIMEOUT_SECONDS:
-        # Auto-logout on session timeout
-        st.session_state.pop("auth_user", None)
-        st.session_state.pop("auth_role", None)
-        st.session_state.pop("last_active_ts", None)
-        log_event("session_timeout", {})
-        st.warning("Your session has expired. Please log in again.")
+    credentials = _build_auth_credentials(AUTH_USERS)
+    authenticator = stauth.Authenticate(
+        credentials=credentials,
+        cookie_name=os.getenv("AUTH_COOKIE_NAME", "agpo_auth"),
+        key=os.getenv("AUTH_COOKIE_KEY", "replace-this-cookie-key-in-env"),
+        cookie_expiry_days=float(os.getenv("AUTH_COOKIE_EXPIRY_DAYS", "1")),
+        auto_hash=True,
+    )
 
-    # ── Brute-force lockout check ─────────────────────────────────────
-    fail_count = int(st.session_state.get("login_fail_count", 0))
-    locked_until = float(st.session_state.get("login_locked_until", 0.0))
-    now = time.time()
-    if now < locked_until:
-        wait_min = int((locked_until - now) // 60) + 1
-        st.error(f"Account temporarily locked due to too many failed attempts. Try again in ~{wait_min} minute(s).")
-        log_event("login_lockout_active", {"wait_seconds": int(locked_until - now)})
-        return
+    login_result = authenticator.login("Login", "main")
+    if isinstance(login_result, tuple) and len(login_result) == 3:
+        _name, authentication_status, username = login_result
+    else:
+        authentication_status = st.session_state.get("authentication_status")
+        username = st.session_state.get("username")
 
-    username = st.text_input("Username", key="auth_username")
-    password = st.text_input("Password", type="password", key="auth_password")
-    if st.button("Login", type="primary"):
-        creds = users.get(username)
-        # FIX S3: use hmac.compare_digest for constant-time comparison (prevents timing attacks)
-        if creds and hmac.compare_digest(password, creds[0]):
-            st.session_state["auth_user"] = username
-            st.session_state["auth_role"] = creds[1]
-            st.session_state["last_active_ts"] = time.time()
-            # Reset fail counter on successful login
-            st.session_state["login_fail_count"] = 0
-            st.session_state.pop("login_locked_until", None)
-            log_event("login_success", {"user": username})
-            st.success(f"Logged in as {username} ({creds[1]})")
-            st.rerun()
-        else:
-            fail_count += 1
-            st.session_state["login_fail_count"] = fail_count
-            log_event("login_failure", {"user": username, "attempt": fail_count})
-            if fail_count >= _MAX_LOGIN_ATTEMPTS:
-                lockout = now + _LOCKOUT_SECONDS
-                st.session_state["login_locked_until"] = lockout
-                st.session_state["login_fail_count"] = 0
-                st.error(f"Too many failed attempts. Account locked for {_LOCKOUT_SECONDS // 60} minutes.")
-            else:
-                remaining = _MAX_LOGIN_ATTEMPTS - fail_count
-                st.error(f"Invalid credentials. {remaining} attempt(s) remaining before lockout.")
+    if authentication_status is False:
+        st.error("Invalid username or password")
+        st.stop()
+    if authentication_status is None:
+        st.info("Please log in to continue")
+        st.stop()
 
-    if _session_user():
-        # Refresh last-active timestamp on every page load for active sessions
-        st.session_state["last_active_ts"] = time.time()
-        if st.button("Logout"):
-            st.session_state.pop("auth_user", None)
-            st.session_state.pop("auth_role", None)
-            st.session_state.pop("last_active_ts", None)
-            log_event("logout", {})
-            st.success("Logged out")
-            st.rerun()
+    role = users.get(str(username), ("", "Operator"))[1]
+    st.session_state["auth_user"] = str(username)
+    st.session_state["auth_role"] = str(role)
+    st.session_state["auth_status"] = True
+    return str(username), str(role), authenticator
+
+
+current_user, current_role, authenticator = _authenticate_user()
 
 with st.sidebar:
-    if AUTH_ENABLED:
-        _login_view()
-    user_info = _session_user() if AUTH_ENABLED else ("guest", "Operator")
-    current_user, current_role = user_info if user_info else ("guest", "Operator")
+    if AUTH_ENABLED and authenticator is not None:
+        authenticator.logout("Logout", "sidebar")
+    st.caption(f"Signed in as: {current_user} ({current_role})")
     # Language: English only
     st.header("Data Input")
     if st.button("Use Demo Data"):
@@ -1031,11 +1017,13 @@ elif data_source == "Upload my factory files":
         cache_dir = FEATURE_STORE_DIR
         data_source_label = "Built-in demo data (waiting for upload)"
     else:
-        st.error("Demo files are missing and upload files are incomplete.")
+        st.warning("Please upload your dataset files to continue")
+        st.info("Required files: _h_batch_production_data.xlsx and _h_batch_process_data_copy.xlsx")
         st.stop()
 else:
     if not demo_available:
-        st.error("Demo dataset files not found in project root. Upload your files from sidebar.")
+        st.warning("Please upload your dataset files to continue")
+        st.info("Required files: _h_batch_production_data.xlsx and _h_batch_process_data_copy.xlsx")
         st.stop()
     production_path = demo_production_path
     process_path = demo_process_path
@@ -1186,7 +1174,12 @@ for scenario_name, data in payload.get("signatures", {}).items():
 if history_rows:
     hist_new = pd.DataFrame(history_rows)
     if history_path.exists():
-        hist_old = pd.read_csv(history_path)
+        try:
+            hist_old = pd.read_csv(history_path)
+        except Exception as exc:
+            logger.exception("Failed to read history file: %s", history_path)
+            st.warning("Unable to read existing history log. Rebuilding history file.")
+            hist_old = pd.DataFrame()
         merged = pd.concat([hist_old, hist_new], ignore_index=True).drop_duplicates(
             subset=["timestamp", "scenario"], keep="last"
         )
@@ -1756,7 +1749,12 @@ if mode == "Level 3 - Enterprise" and not is_simple and not bool(st.session_stat
         st.markdown("**Best benchmark trend over time**")
         st.caption("Shows whether our golden benchmark score is improving month by month.")
         if history_path.exists():
-            hist_df = pd.read_csv(history_path)
+            try:
+                hist_df = pd.read_csv(history_path)
+            except Exception as exc:
+                logger.exception("Failed to read history file for trend chart: %s", history_path)
+                st.warning("Unable to load history trend due to a file read issue.")
+                hist_df = pd.DataFrame()
             hist_df["timestamp"] = pd.to_datetime(hist_df["timestamp"], errors="coerce")
             hist_goal = hist_df[hist_df["scenario"] == goal].copy()
             if not hist_goal.empty:

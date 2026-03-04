@@ -1,11 +1,18 @@
 from __future__ import annotations
 
 from pathlib import Path
+import hashlib
+import logging
+import os
 
 import altair as alt
 import numpy as np
 import pandas as pd
 import streamlit as st
+from dotenv import load_dotenv
+
+load_dotenv()
+logger = logging.getLogger(__name__)
 
 alt.data_transformers.disable_max_rows()
 
@@ -264,10 +271,60 @@ def _load_features() -> pd.DataFrame:
     ]
     for fallback in fallbacks:
         if fallback.exists():
-            loaded = pd.read_csv(fallback, low_memory=False)
+            try:
+                loaded = pd.read_csv(fallback, low_memory=False)
+            except Exception:
+                logger.exception("Failed to read analytics fallback file: %s", fallback)
+                continue
             if not loaded.empty:
                 return loaded
     return pd.DataFrame()
+
+
+def _show_dataset_upload_fallback() -> None:
+    st.warning("Please upload your dataset files to continue")
+    st.caption("Required files: _h_batch_production_data.xlsx and _h_batch_process_data_copy.xlsx")
+
+    up_col1, up_col2 = st.columns(2)
+    with up_col1:
+        production_upload = st.file_uploader(
+            "Upload _h_batch_production_data.xlsx",
+            type=["xlsx", "csv"],
+            key="adv_prod_upload",
+        )
+    with up_col2:
+        process_upload = st.file_uploader(
+            "Upload _h_batch_process_data_copy.xlsx",
+            type=["xlsx", "csv"],
+            key="adv_proc_upload",
+        )
+
+    if production_upload is not None and process_upload is not None:
+        uploads_dir = Path("artifacts/uploads")
+        uploads_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            prod_blob = production_upload.getvalue()
+            proc_blob = process_upload.getvalue()
+            prod_name = f"production_uploaded_{hashlib.sha256(prod_blob).hexdigest()[:12]}{Path(production_upload.name).suffix.lower() or '.xlsx'}"
+            proc_name = f"process_uploaded_{hashlib.sha256(proc_blob).hexdigest()[:12]}{Path(process_upload.name).suffix.lower() or '.xlsx'}"
+            prod_path = uploads_dir / prod_name
+            proc_path = uploads_dir / proc_name
+            prod_path.write_bytes(prod_blob)
+            proc_path.write_bytes(proc_blob)
+            st.session_state["uploaded_production_meta"] = {
+                "name": production_upload.name,
+                "path": str(prod_path.resolve()),
+                "stamp": (str(prod_path.resolve()), int(prod_path.stat().st_mtime)),
+            }
+            st.session_state["uploaded_process_meta"] = {
+                "name": process_upload.name,
+                "path": str(proc_path.resolve()),
+                "stamp": (str(proc_path.resolve()), int(proc_path.stat().st_mtime)),
+            }
+            st.success("Files uploaded. Go back to Main Dashboard to continue processing.")
+        except Exception as exc:
+            logger.exception("Failed to store uploaded fallback files")
+            st.error("Unable to save uploaded files. Please try again.")
 
 
 def _current_score(batch_id: str, ranked: pd.DataFrame | None, row: pd.Series) -> float:
@@ -400,6 +457,12 @@ def _safe_metric_list(frame: pd.DataFrame, candidates: list[str]) -> list[str]:
     return present or [col for col in frame.columns if pd.api.types.is_numeric_dtype(frame[col])][:4]
 
 
+if os.getenv("AUTH_ENABLED", "false").lower() == "true" and not st.session_state.get("auth_user"):
+    st.warning("Please log in from the main dashboard to access Advanced Analytics.")
+    st.page_link("app.py", label="Go to Login", icon=":material/login:")
+    st.stop()
+
+
 _inject_advanced_theme()
 
 st.markdown(
@@ -417,9 +480,7 @@ ranked = st.session_state.get("adv_ranked")
 golden = st.session_state.get("adv_golden_profile", {})
 
 if features.empty or "Batch_ID" not in features.columns:
-    st.warning(
-        "No analytics data found yet. Upload data in main dashboard, or add `artifacts/demo_features.csv` for a restart-safe demo view."
-    )
+    _show_dataset_upload_fallback()
     st.page_link("app.py", label="Go to Main Dashboard", icon=":material/home:")
     st.stop()
 

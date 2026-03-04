@@ -5,6 +5,10 @@ from __future__ import annotations
 from typing import Dict
 import os
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 PRODUCTION_DATA_FILE = os.environ.get("PRODUCTION_DATA_FILE", "_h_batch_production_data.xlsx")
 PROCESS_DATA_FILE = os.environ.get("PROCESS_DATA_FILE", "_h_batch_process_data_copy.xlsx")
 GOLDEN_SIGNATURE_FILE = os.environ.get("GOLDEN_SIGNATURE_FILE", "artifacts/golden_signatures.json")
