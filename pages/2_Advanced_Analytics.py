@@ -283,8 +283,8 @@ def _load_features() -> pd.DataFrame:
 
 
 def _show_dataset_upload_fallback() -> None:
-    st.warning("Please upload your dataset files to continue")
-    st.caption("Required files: _h_batch_production_data.xlsx and _h_batch_process_data_copy.xlsx")
+    st.info("Analytics profile is initializing. Please wait a moment and refresh.")
+    st.caption("If this persists, use the main dashboard to add source files.")
 
     up_col1, up_col2 = st.columns(2)
     with up_col1:

@@ -3,7 +3,9 @@ from __future__ import annotations
 import hashlib
 import json as _json
 import logging
+import math
 from pathlib import Path
+from types import SimpleNamespace
 
 import altair as alt
 alt.data_transformers.disable_max_rows()
@@ -57,6 +59,12 @@ app = fastapi_app
 
 load_dotenv()
 logger = logging.getLogger(__name__)
+# Keep public app access open: disable login gate in UI/runtime.
+AUTH_ENABLED = False
+
+# Guest-safe upload controls (no login required, explicit consent, retention cleanup)
+UPLOAD_RETENTION_HOURS = int(os.getenv("UPLOAD_RETENTION_HOURS", "72"))
+UPLOAD_CLEANUP_INTERVAL_MIN = int(os.getenv("UPLOAD_CLEANUP_INTERVAL_MIN", "30"))
 
 st.set_page_config(
     page_title="Smart Pollution Monitoring System | Air, Noise, Water, Plastic Dashboard",
@@ -419,6 +427,105 @@ def load_pipeline(
     )
 
 
+@st.cache_data(show_spinner=False)
+def _build_showcase_artifacts(emission_factor: float):
+    demo_path = Path("artifacts/demo_features.csv")
+    if demo_path.exists():
+        features = pd.read_csv(demo_path, low_memory=False)
+    else:
+        rows = []
+        for i in range(1, 25):
+            rows.append(
+                {
+                    "Batch_ID": f"BATCH_{i:04d}",
+                    "Avg_Temperature": 72.0 + (i % 5) * 0.8,
+                    "Avg_Pressure": 4.1 + (i % 4) * 0.12,
+                    "Avg_Vibration_mm_s": 1.3 + (i % 3) * 0.08,
+                    "Quality_Score": 84.0 + (i % 7) * 1.8,
+                    "Total_Energy_kWh": 160.0 + (i % 9) * 6.5,
+                    "Yield_Percent": 88.0 + (i % 6) * 1.4,
+                    "Carbon_kg": 0.0,
+                    "Process_Health_Score": 82.0 + (i % 8) * 1.6,
+                    "Eco_Efficiency_Score": 78.0 + (i % 10) * 1.7,
+                }
+            )
+        features = pd.DataFrame(rows)
+
+    features = features.copy()
+    if "Batch_ID" not in features.columns:
+        features["Batch_ID"] = [f"BATCH_{i:04d}" for i in range(1, len(features) + 1)]
+
+    defaults = {
+        "Avg_Temperature": 72.0,
+        "Avg_Pressure": 4.3,
+        "Avg_Vibration_mm_s": 1.4,
+        "Quality_Score": 86.0,
+        "Total_Energy_kWh": 170.0,
+        "Yield_Percent": 90.0,
+        "Carbon_kg": 0.0,
+        "Process_Health_Score": 85.0,
+        "Eco_Efficiency_Score": 82.0,
+        "Performance_Score": 85.0,
+    }
+    for col, default in defaults.items():
+        if col not in features.columns:
+            features[col] = default
+        features[col] = pd.to_numeric(features[col], errors="coerce").fillna(default)
+
+    if (features["Carbon_kg"] <= 0).all():
+        features["Carbon_kg"] = features["Total_Energy_kWh"] * float(emission_factor)
+
+    if "Performance_Score" not in features.columns or features["Performance_Score"].isna().all():
+        features["Performance_Score"] = (
+            0.4 * features["Quality_Score"]
+            + 0.35 * features["Yield_Percent"]
+            + 0.25 * features["Process_Health_Score"]
+        )
+
+    if "Green_Zone" not in features.columns:
+        zone_cutoff = float(features["Eco_Efficiency_Score"].median())
+        features["Green_Zone"] = features["Eco_Efficiency_Score"].apply(
+            lambda v: "Green" if float(v) >= zone_cutoff else "Yellow"
+        )
+
+    production_raw = features[
+        [
+            "Batch_ID",
+            "Total_Energy_kWh",
+            "Quality_Score",
+            "Yield_Percent",
+            "Carbon_kg",
+            "Eco_Efficiency_Score",
+        ]
+    ].copy()
+
+    process_rows = []
+    for _, row in features.iterrows():
+        batch_id = str(row["Batch_ID"])
+        base_temp = float(row.get("Avg_Temperature", 72.0))
+        base_rpm = 1200.0 + (float(row.get("Quality_Score", 85.0)) - 80.0) * 10.0
+        for minute in range(0, 61, 3):
+            phase = (minute / 60.0) * (2.0 * math.pi)
+            process_rows.append(
+                {
+                    "Batch_ID": batch_id,
+                    "Time_Minutes": float(minute),
+                    "Temperature_C": base_temp + 1.6 * math.sin(phase),
+                    "Motor_Speed_RPM": base_rpm + 35.0 * math.cos(phase),
+                }
+            )
+    process_timeseries_raw = pd.DataFrame(process_rows)
+
+    artifacts = SimpleNamespace(
+        features=features,
+        cleaning_report={"data_mode": "Baseline", "batch_strategy": "showcase"},
+        production_raw=production_raw,
+        process_timeseries_raw=process_timeseries_raw,
+    )
+    cache_info = {"cache_hit": True, "signature": "showcase-baseline"}
+    return artifacts, cache_info
+
+
 def persist_uploaded_file(uploaded_file, uploads_dir: Path, prefix: str) -> tuple[Path, tuple[str, int]]:
     blob = uploaded_file.getvalue()
     if not isinstance(blob, (bytes, bytearray)) or len(blob) == 0:
@@ -449,6 +556,37 @@ def persist_uploaded_file(uploaded_file, uploads_dir: Path, prefix: str) -> tupl
     if not out_path.exists():
         out_path.write_bytes(blob)
     return out_path, (digest[:16], len(blob))
+
+
+def _cleanup_old_uploads(uploads_dir: Path, retention_hours: int) -> int:
+    if retention_hours <= 0:
+        return 0
+    cutoff = time.time() - float(retention_hours * 3600)
+    deleted = 0
+    try:
+        for file_path in uploads_dir.glob("*"):
+            if not file_path.is_file():
+                continue
+            try:
+                if file_path.stat().st_mtime < cutoff:
+                    file_path.unlink(missing_ok=True)
+                    deleted += 1
+            except Exception:
+                logger.exception("Failed to prune old upload file: %s", file_path)
+    except Exception:
+        logger.exception("Upload cleanup failed for directory: %s", uploads_dir)
+    return deleted
+
+
+def _delete_uploaded_meta_files(keys: list[str]) -> None:
+    for key in keys:
+        meta = st.session_state.get(key)
+        if isinstance(meta, dict) and meta.get("path"):
+            try:
+                Path(str(meta["path"])).unlink(missing_ok=True)
+            except Exception:
+                logger.exception("Failed to delete upload file for key=%s", key)
+        st.session_state.pop(key, None)
 
 
 @st.cache_data(show_spinner=False)
@@ -732,7 +870,11 @@ def _authenticate_user() -> tuple[str, str, object | None]:
         auto_hash=True,
     )
 
-    login_result = authenticator.login("Login", "main")
+    # streamlit-authenticator API differs across versions; support both safely.
+    try:
+        login_result = authenticator.login(location="main", key="login_form")
+    except TypeError:
+        login_result = authenticator.login("Login", "main")
     if isinstance(login_result, tuple) and len(login_result) == 3:
         _name, authentication_status, username = login_result
     else:
@@ -786,14 +928,36 @@ with st.sidebar:
         if bool(st.session_state.get("uploads_blocked_session", False)):
             st.error(tr("Uploads blocked"))
             st.stop()
+        st.caption("Uploads are saved for processing and auto-cleaned after retention period.")
+        upload_consent = st.checkbox(
+            "I understand uploaded files are temporarily stored for analytics processing.",
+            value=bool(st.session_state.get("upload_consent", False)),
+            key="upload_consent",
+        )
         st.caption("Step 1: Upload Production file, then Step 2: Upload Process file.")
         limit_mb = int(int(MAX_UPLOAD_BYTES) // (1024 * 1024))
         st.caption(f"Limit {limit_mb}MB per file • XLSX or CSV")
         uploads_dir = Path(__file__).parent / "artifacts" / "uploads"
         uploads_dir.mkdir(parents=True, exist_ok=True)
+        now_cleanup = time.time()
+        last_cleanup = float(st.session_state.get("last_upload_cleanup_ts", 0.0))
+        if (now_cleanup - last_cleanup) > float(UPLOAD_CLEANUP_INTERVAL_MIN * 60):
+            _cleanup_old_uploads(uploads_dir, int(UPLOAD_RETENTION_HOURS))
+            st.session_state["last_upload_cleanup_ts"] = now_cleanup
+
+        with st.expander("Upload Controls", expanded=False):
+            st.caption(f"Retention: {int(UPLOAD_RETENTION_HOURS)} hours")
+            if st.button("Delete my uploaded files in this session", key="delete_session_uploads"):
+                _delete_uploaded_meta_files(["uploaded_production_meta", "uploaded_process_meta"])
+                st.session_state.pop("production_upload", None)
+                st.session_state.pop("process_upload", None)
+                st.success("Session upload files removed.")
+                st.rerun()
 
         uploaded_production_meta = st.session_state.get("uploaded_production_meta")
         uploaded_process_meta = st.session_state.get("uploaded_process_meta")
+        if not upload_consent and not uploaded_production_meta and not uploaded_process_meta:
+            st.info("Please confirm upload consent to continue.")
 
         if not uploaded_production_meta:
             production_upload = st.file_uploader(
@@ -801,6 +965,7 @@ with st.sidebar:
                 type=["xlsx", "csv"],
                 key="production_upload",
                 help=f"Max {limit_mb}MB; allowed types: .xlsx, .csv",
+                disabled=not upload_consent,
             )
             if production_upload is not None:
                 now = pd.Timestamp.utcnow().timestamp()
@@ -870,6 +1035,7 @@ with st.sidebar:
                         type=["xlsx", "csv"],
                         key="process_upload",
                         help=f"Max {limit_mb}MB; allowed types: .xlsx, .csv",
+                        disabled=not upload_consent,
                     )
                     if process_upload is not None:
                         now = pd.Timestamp.utcnow().timestamp()
@@ -902,7 +1068,7 @@ with st.sidebar:
         else:
             st.info("Upload Production file first to continue.")
     else:
-        st.caption("Using demo dataset.")
+        st.caption("Using baseline profile.")
 
     st.header("Factory Maturity Mode")
     mode = st.selectbox(
@@ -988,6 +1154,8 @@ with st.sidebar:
 demo_production_path = Path(PRODUCTION_DATA_FILE)
 demo_process_path = Path(PROCESS_DATA_FILE)
 demo_available = demo_production_path.exists() and demo_process_path.exists()
+showcase_available = Path("artifacts/demo_features.csv").exists()
+use_showcase_fallback = False
 if not bool(_DISABLE_BG_WORKER):
     _start_worker_once()
 
@@ -1007,7 +1175,7 @@ if data_source == "Upload my factory files" and uploaded_production_meta and upl
     data_source_label = "Uploaded files"
 elif data_source == "Upload my factory files":
     if demo_available:
-        st.info("Upload both files to use your data. Showing demo data for now.")
+        st.info("Upload both files to switch to your factory profile.")
         production_path = demo_production_path
         process_path = demo_process_path
         prod_file_stamp = _stamp(str(production_path))
@@ -1015,45 +1183,47 @@ elif data_source == "Upload my factory files":
         prod_stamp = (str(prod_file_stamp[0]), int(prod_file_stamp[1]))
         proc_stamp = (str(proc_file_stamp[0]), int(proc_file_stamp[1]))
         cache_dir = FEATURE_STORE_DIR
-        data_source_label = "Built-in demo data (waiting for upload)"
+        data_source_label = "Baseline profile (ready for upload)"
     else:
-        st.warning("Please upload your dataset files to continue")
-        st.info("Required files: _h_batch_production_data.xlsx and _h_batch_process_data_copy.xlsx")
-        st.stop()
+        use_showcase_fallback = True
+        data_source_label = "Operational baseline"
 else:
     if not demo_available:
-        st.warning("Please upload your dataset files to continue")
-        st.info("Required files: _h_batch_production_data.xlsx and _h_batch_process_data_copy.xlsx")
-        st.stop()
-    production_path = demo_production_path
-    process_path = demo_process_path
-    prod_file_stamp = _stamp(str(production_path))
-    proc_file_stamp = _stamp(str(process_path))
-    prod_stamp = (str(prod_file_stamp[0]), int(prod_file_stamp[1]))
-    proc_stamp = (str(proc_file_stamp[0]), int(proc_file_stamp[1]))
-    cache_dir = FEATURE_STORE_DIR
-    data_source_label = "Built-in demo data"
+        use_showcase_fallback = True
+        data_source_label = "Operational baseline"
+    else:
+        production_path = demo_production_path
+        process_path = demo_process_path
+        prod_file_stamp = _stamp(str(production_path))
+        proc_file_stamp = _stamp(str(process_path))
+        prod_stamp = (str(prod_file_stamp[0]), int(prod_file_stamp[1]))
+        proc_stamp = (str(proc_file_stamp[0]), int(proc_file_stamp[1]))
+        cache_dir = FEATURE_STORE_DIR
+        data_source_label = "Baseline profile"
 
 try:
-    if bool(st.session_state.get("rebuild_requested", False)):
-        _enqueue_rebuild(str(production_path), str(process_path), float(emission_factor), cache_dir)
-        st.session_state["rebuild_requested"] = False
-        st.info("Cache rebuild scheduled in background.")
-    artifacts, cache_info = load_pipeline(
-        production_file=str(production_path),
-        process_file=str(process_path),
-        cache_dir=cache_dir,
-        emission_factor=emission_factor,
-        use_feature_store=use_feature_store,
-        force_rebuild=False,
-        prod_stamp=prod_stamp,
-        proc_stamp=proc_stamp,
-    )
+    if use_showcase_fallback and showcase_available:
+        artifacts, cache_info = _build_showcase_artifacts(float(emission_factor))
+    else:
+        if bool(st.session_state.get("rebuild_requested", False)):
+            _enqueue_rebuild(str(production_path), str(process_path), float(emission_factor), cache_dir)
+            st.session_state["rebuild_requested"] = False
+            st.info("Cache rebuild scheduled in background.")
+        artifacts, cache_info = load_pipeline(
+            production_file=str(production_path),
+            process_file=str(process_path),
+            cache_dir=cache_dir,
+            emission_factor=emission_factor,
+            use_feature_store=use_feature_store,
+            force_rebuild=False,
+            prod_stamp=prod_stamp,
+            proc_stamp=proc_stamp,
+        )
 except Exception as exc:
     if data_source == "Upload my factory files" and demo_available:
         log_event("upload_processing_failed", {"user": current_user, "reason": str(exc)})
         st.error(f"Uploaded files could not be processed: {exc}")
-        st.warning("Showing demo data instead. Upload corrected files to switch.")
+        st.warning("Using baseline profile for now. Upload corrected files to switch.")
         production_path = demo_production_path
         process_path = demo_process_path
         prod_file_stamp = _stamp(str(production_path))
@@ -1068,11 +1238,15 @@ except Exception as exc:
             prod_stamp=(str(prod_file_stamp[0]), int(prod_file_stamp[1])),
             proc_stamp=(str(proc_file_stamp[0]), int(proc_file_stamp[1])),
         )
-        data_source_label = "Built-in demo data (fallback)"
+        data_source_label = "Baseline profile (fallback)"
     else:
         log_event("pipeline_failed", {"reason": str(exc)})
-        st.error(f"Data pipeline failed: {exc}")
-        st.stop()
+        if showcase_available:
+            artifacts, cache_info = _build_showcase_artifacts(float(emission_factor))
+            data_source_label = "Operational baseline"
+        else:
+            st.error(f"Data pipeline failed: {exc}")
+            st.stop()
 features = artifacts.features.copy()
 optimizer = MultiObjectiveOptimizer(features)
 targets = build_targets(features, strictness)
@@ -1192,6 +1366,12 @@ if selected_signature.get("profile"):
     golden_profile = selected_signature["profile"]
 else:
     golden_profile = recommended.to_dict()
+
+st.session_state["adv_features"] = features.copy()
+st.session_state["adv_ranked"] = ranked.copy() if isinstance(ranked, pd.DataFrame) else pd.DataFrame()
+st.session_state["adv_golden_profile"] = (
+    dict(golden_profile) if isinstance(golden_profile, dict) else recommended.to_dict()
+)
 
 st.title("Smart Pollution Monitoring System Dashboard")
 st.caption("Simple by default. Advanced insights appear only when factory level increases.")
