@@ -82,9 +82,29 @@ UPLOAD_RETENTION_HOURS = int(os.getenv("UPLOAD_RETENTION_HOURS", "72"))
 UPLOAD_CLEANUP_INTERVAL_MIN = int(os.getenv("UPLOAD_CLEANUP_INTERVAL_MIN", "30"))
 
 st.set_page_config(
-    page_title="Smart Pollution Monitoring System | Air, Noise, Water, Plastic Dashboard",
+    page_title="Pollution Radar - Air Quality Monitor India",
+    page_icon="🌍",
     layout="wide",
     initial_sidebar_state="expanded",
+)
+st.markdown(
+    """
+    <meta name="description" content="Pollution Radar - Real-time air quality and factory pollution monitoring dashboard for India. Track pollution levels, eco efficiency and carbon emissions.">
+    """,
+    unsafe_allow_html=True,
+)
+st.markdown(
+    """
+    <section aria-label="SEO Keywords">
+      <h2 style="font-size:0.01px; margin:0; line-height:0;">Pollution Radar SEO Keywords</h2>
+      <p style="margin:0;">
+        Air quality monitoring India, Factory pollution tracker, Real-time pollution dashboard,
+        Carbon emission monitoring, Eco efficiency score, Industrial pollution India,
+        Pollution monitoring system
+      </p>
+    </section>
+    """,
+    unsafe_allow_html=True,
 )
 Path("artifacts").mkdir(parents=True, exist_ok=True)
 # Automatic cloud-safe mode: disable background worker on headless servers

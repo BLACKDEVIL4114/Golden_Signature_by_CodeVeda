@@ -18,9 +18,8 @@ logger = logging.getLogger(__name__)
 alt.data_transformers.disable_max_rows()
 
 st.set_page_config(
-    page_title="Advanced Analytics",
-    layout="wide",
-    initial_sidebar_state="expanded",
+    page_title="Advanced Analytics - Pollution Radar",
+    page_icon="📊",
 )
 
 
