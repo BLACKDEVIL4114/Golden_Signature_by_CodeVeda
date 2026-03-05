@@ -15,6 +15,10 @@ import threading
 import time
 import smtplib
 import os
+try:
+    from fastapi.responses import FileResponse
+except Exception:
+    FileResponse = None
 
 from dotenv import load_dotenv
 try:
@@ -59,6 +63,14 @@ try:
 except Exception:
     fastapi_app = None
 app = fastapi_app
+
+if app is not None and FileResponse is not None and not any(getattr(route, "path", "") == "/sitemap.xml" for route in app.routes):
+    @app.get("/sitemap.xml", include_in_schema=False)
+    def sitemap_xml() -> FileResponse:
+        return FileResponse(
+            Path(__file__).resolve().parent / "sitemap.xml",
+            media_type="application/xml",
+        )
 
 load_dotenv()
 logger = logging.getLogger(__name__)
