@@ -87,6 +87,10 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+st.markdown("""
+    <meta http-equiv="Strict-Transport-Security" 
+    content="max-age=31536000; includeSubDomains; preload">
+""", unsafe_allow_html=True)
 st.markdown(
     """
     <meta name="description" content="Pollution Radar - Real-time air quality and factory pollution monitoring dashboard for India. Track pollution levels, eco efficiency and carbon emissions.">
