@@ -1487,6 +1487,17 @@ st.markdown(
     "**noise pollution monitoring**, **water pollution tracking**, and "
     "**plastic waste monitoring** with hotspot detection and trend analytics."
 )
+st.markdown(
+    """
+### Resource Center
+
+- [Industrial Pollution Monitoring Guide](./Industrial_Pollution_Monitoring_Guide)
+- [Carbon Emission Monitoring for Factories](./Carbon_Emission_Monitoring_for_Factories)
+- [Factory Sustainability FAQ](./Factory_Sustainability_FAQ)
+- [Advanced Analytics](./Advanced_Analytics)
+""",
+    unsafe_allow_html=True,
+)
 if not is_simple:
     st.caption(f"Pipeline Mode: {pipeline_mode} | Batch Strategy: {batch_strategy}")
     st.caption(f"Experience Mode: {ui_mode}")
