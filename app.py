@@ -26,6 +26,59 @@ try:
 except Exception:
     stauth = None
 
+
+SEO_SHELL_MARKER = "pollution-radar-seo-shell"
+SEO_SHELL_TITLE = "Pollution Radar - Real-Time Industrial Pollution Monitoring"
+SEO_SHELL_DESCRIPTION = (
+    "Pollution Radar is a real-time dashboard for monitoring industrial emissions, "
+    "air quality, carbon impact, and factory sustainability performance."
+)
+SEO_SHELL_H1 = "Pollution Radar Industrial Pollution Monitoring Dashboard"
+
+
+def patch_streamlit_shell() -> None:
+    """Inject basic SEO tags into Streamlit's base HTML shell for crawlers."""
+    try:
+        streamlit_index = Path(st.__file__).resolve().parent / "static" / "index.html"
+        html = streamlit_index.read_text(encoding="utf-8")
+    except Exception:
+        return
+
+    if SEO_SHELL_MARKER in html:
+        return
+
+    patched = html.replace(
+        "<title>Streamlit</title>",
+        (
+            f'<title>{SEO_SHELL_TITLE}</title>'
+            f'<meta name="description" content="{SEO_SHELL_DESCRIPTION}"/>'
+            '<meta name="robots" content="index,follow"/>'
+            '<meta name="keywords" content="pollution monitoring dashboard, industrial emissions, '
+            'carbon emission monitoring, air quality monitoring, sustainability dashboard"/>'
+            f'<meta name="{SEO_SHELL_MARKER}" content="1"/>'
+        ),
+        1,
+    )
+    patched = patched.replace(
+        "<body>",
+        (
+            "<body>"
+            f'<h1 style="position:absolute;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden;">{SEO_SHELL_H1}</h1>'
+        ),
+        1,
+    )
+
+    if patched == html:
+        return
+
+    try:
+        streamlit_index.write_text(patched, encoding="utf-8")
+    except Exception:
+        return
+
+
+patch_streamlit_shell()
+
 from trackb_engine.config import (
     DEFAULT_ANNUAL_BATCHES,
     DEFAULT_EMISSION_FACTOR,
