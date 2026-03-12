@@ -76,6 +76,7 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 # Keep public app access open: disable login gate in UI/runtime.
 AUTH_ENABLED = False
+BING_VERIFICATION_CONTENT = os.getenv("BING_VERIFICATION_CONTENT", "").strip()
 
 # Guest-safe upload controls (no login required, explicit consent, retention cleanup)
 UPLOAD_RETENTION_HOURS = int(os.getenv("UPLOAD_RETENTION_HOURS", "72"))
@@ -97,6 +98,13 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+if BING_VERIFICATION_CONTENT:
+    st.markdown(
+        f"""
+        <meta name="msvalidate.01" content="{_json.dumps(BING_VERIFICATION_CONTENT)[1:-1]}">
+        """,
+        unsafe_allow_html=True,
+    )
 st.markdown(
     """
     <section aria-label="SEO Keywords">
